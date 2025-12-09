@@ -21,7 +21,7 @@ app.use(express.json())
 app.use(cookieParser());
 
 
-readdirSync('./routes').map((route) => app.use('', require('./routes/' + route)))
+readdirSync('./routes').map((route) => app.use('', require('./routes/' +route)))
 
 const server = () => {
     db()
@@ -29,5 +29,4 @@ const server = () => {
         console.log(PORT);
     })
 }
-
 server()
