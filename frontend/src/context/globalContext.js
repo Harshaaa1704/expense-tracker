@@ -1,11 +1,11 @@
 import React, { useContext, useState, useEffect } from "react";
-import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
-import { useCookies } from 'react-cookie';
-import { toast, Toaster } from 'react-hot-toast';
+import axios from "axios";
+import { useNavigate } from "react-router-dom";
+import { useCookies } from "react-cookie";
+import { toast, Toaster } from "react-hot-toast";
 
-
-const BASE_URL = process.env.REACT_APP_API_BASE_URL;
+// Use the deployed backend URL
+const BASE_URL = process.env.REACT_APP_API_BASE_URL; // e.g., https://spendx-z7ag.onrender.com/api/v1/
 
 const GlobalContext = React.createContext();
 
@@ -15,77 +15,74 @@ export const GlobalProvider = ({ children }) => {
   const [error, setError] = useState(null);
   const [user, setUser] = useState(null);
   const [name, setName] = useState("");
-  const [cookies, setCookie ,removeCookie] = useCookies([]);
+  const [cookies, setCookie, removeCookie] = useCookies([]);
   const navigate = useNavigate();
 
-  // Login user
+  // ===== LOGIN =====
   const login = async (values) => {
     try {
-      const { data } = await axios.post(
-        `${BASE_URL}login`,
-        {
-          ...values,
-        },
-        { withCredentials: true }
-      );
-      if (data.errors) {
-        const { email, password } = data.errors;
-        if (email) setError(email);
-        else if (password) setError(password);
-      } else {
-        setUser(data.user);
-        navigate('/');
-        await checkUser();
-        toast.success("Login Sucessful!")
-
-      }
-    } catch (err) {
-      console.log(err);
-    }
-  };
-
-  // Register user
-  const register = async (values) => {
-    try {
-      const { data } = await axios.post(
-        `${BASE_URL}register`,
-        {
-          ...values,
-        },
-        { withCredentials: true }
-      );
-      if (data.errors) {
-        const { email, password } = data.errors;
-        if (email) setError(email);
-        else if (password) setError(password);
-      } else {
-        setUser(data.user);
-        navigate('/');
-        await checkUser();
-        toast.success("Register Sucessful!")
-      }
-    } catch (err) {
-      console.log(err);
-    }
-  };
-
-  // Check user authentication status
-  const checkUser = async () => {
-    try {
-      const { data } = await axios.post(`https://spendx-z7ag.onrender.com`,{}, {
+      const { data } = await axios.post(`${BASE_URL}login`, values, {
         withCredentials: true,
       });
-      if (data.status) {
-        setUser(data.user);
-        setName(data.name);
-        navigate('/');
+
+      if (data.errors) {
+        setError(data.errors.email || data.errors.password);
       } else {
-        setUser(null);
-        navigate('/login');
+        setUser(data.user);
+        setName(data.user.name || "");
+        toast.success("Login Successful!");
+        navigate("/"); // redirect to dashboard
       }
     } catch (err) {
-      console.log(err);
+      console.error(err);
+      toast.error("Login failed. Please try again.");
+    }
+  };
+
+  // ===== REGISTER =====
+  const register = async (values) => {
+    try {
+      const { data } = await axios.post(`${BASE_URL}register`, values, {
+        withCredentials: true,
+      });
+
+      if (data.errors) {
+        setError(data.errors.email || data.errors.password);
+      } else {
+        setUser(data.user);
+        setName(data.user.name || "");
+        toast.success("Registration Successful!");
+        navigate("/"); // redirect to dashboard
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Registration failed. Please try again.");
+    }
+  };
+
+  // ===== CHECK USER AUTH =====
+  const checkUser = async () => {
+    try {
+      if (!cookies.jwt) {
+        setUser(null);
+        return;
+      }
+
+      const { data } = await axios.get(`${BASE_URL}check-user`, {
+        withCredentials: true,
+      });
+
+      if (data.status) {
+        setUser(data.user);
+        setName(data.user.name || "");
+      } else {
+        setUser(null);
+        navigate("/login");
+      }
+    } catch (err) {
+      console.error(err);
       setUser(null);
+      navigate("/login");
     }
   };
 
@@ -95,148 +92,141 @@ export const GlobalProvider = ({ children }) => {
 
   useEffect(() => {
     if (user) {
-      getIncomes();
-      getExpenses();
+      fetchIncomes();
+      fetchExpenses();
     }
   }, [user]);
 
-  // Sign out user
-  const signOutUser = async () => {
+  // ===== SIGN OUT =====
+  const signOutUser = () => {
+    removeCookie("jwt", { path: "/" });
+    setUser(null);
+    navigate("/login");
+  };
+
+  // ===== INCOME FUNCTIONS =====
+  const addIncome = async (income) => {
     try {
-      removeCookie('jwt', { path: '/' });
-      setCookie(null);
-      setUser(null);
-      navigate('/login');
-      window.location.reload();
+      await axios.post(`${BASE_URL}add-income`, income, {
+        withCredentials: true,
+      });
+      fetchIncomes();
     } catch (err) {
-      console.log(err);
+      setError(err.response?.data?.message || "Failed to add income.");
     }
   };
 
-  // Income and expense functions
-  const addIncome = async (income) => {
-    await axios.post(`${BASE_URL}add-income`, income)
-      .catch((err) => {
-        setError(err.response.data.message);
+  const fetchIncomes = async () => {
+    try {
+      const res = await axios.get(`${BASE_URL}get-incomes?userid=${user?._id}`, {
+        withCredentials: true,
       });
-    getIncomes();
-  };
-
-  const getIncomes = async () => {
-    const response = await axios.get(`${BASE_URL}get-incomes?userid=${user}`);
-    setIncomes(response.data);
+      setIncomes(res.data);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const deleteIncome = async (id) => {
-    await axios.delete(`${BASE_URL}delete-income/${id}`);
-    getIncomes();
-  };
-
-  const totalIncome = () => {
-    let totalIncome = 0;
-    incomes.forEach((income) => {
-      totalIncome = totalIncome + income.amount;
-    });
-    return totalIncome;
-  };
-
-  const addExpense = async (expense) => {
-    await axios.post(`${BASE_URL}add-expense`, expense)
-      .catch((err) => {
-        setError(err.response.data.message);
+    try {
+      await axios.delete(`${BASE_URL}delete-income/${id}`, {
+        withCredentials: true,
       });
-    getExpenses();
+      fetchIncomes();
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  const getExpenses = async () => {
-    const response = await axios.get(`${BASE_URL}get-expenses?userid=${user}`);
-    setExpenses(response.data);
+  const totalIncome = () =>
+    incomes.reduce((sum, income) => sum + income.amount, 0);
+
+  // ===== EXPENSE FUNCTIONS =====
+  const addExpense = async (expense) => {
+    try {
+      await axios.post(`${BASE_URL}add-expense`, expense, {
+        withCredentials: true,
+      });
+      fetchExpenses();
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to add expense.");
+    }
+  };
+
+  const fetchExpenses = async () => {
+    try {
+      const res = await axios.get(`${BASE_URL}get-expenses?userid=${user?._id}`, {
+        withCredentials: true,
+      });
+      setExpenses(res.data);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const deleteExpense = async (id) => {
-    await axios.delete(`${BASE_URL}delete-expense/${id}`);
-    getExpenses();
+    try {
+      await axios.delete(`${BASE_URL}delete-expense/${id}`, {
+        withCredentials: true,
+      });
+      fetchExpenses();
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  const totalExpenses = () => {
-    let totalExpense = 0;
-    expenses.forEach((expense) => {
-      totalExpense = totalExpense + expense.amount;
-    });
-    return totalExpense;
-  };
+  const totalExpenses = () =>
+    expenses.reduce((sum, expense) => sum + expense.amount, 0);
 
-  const totalBalance = () => {
-    return totalIncome() - totalExpenses();
-  };
+  const totalBalance = () => totalIncome() - totalExpenses();
 
   const transactionHistory = () => {
     const history = [...incomes, ...expenses];
-    history.sort((a, b) => {
-      return new Date(b.createdAt) - new Date(a.createdAt);
-    });
+    history.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     return history.slice(0, 3);
   };
 
-  const generateError = (error) => toast.error(error);
-
-
-    useEffect(() => {
-        if (error) generateError(error);
-      }, [error]);
+  // ===== ERROR TOAST =====
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+      setError(null);
+    }
+  }, [error]);
 
   return (
-    <GlobalContext.Provider value={{
-      addIncome,
-      getIncomes,
-      incomes,
-      deleteIncome,
-      expenses,
-      totalIncome,
-      addExpense,
-      getExpenses,
-      deleteExpense,
-      totalExpenses,
-      totalBalance,
-      transactionHistory,
-      error,
-      setError,
-      user,
-      login,
-      register,
-      signOutUser,
-      name
-    }}>
+    <GlobalContext.Provider
+      value={{
+        user,
+        name,
+        incomes,
+        expenses,
+        error,
+        login,
+        register,
+        signOutUser,
+        addIncome,
+        fetchIncomes,
+        deleteIncome,
+        totalIncome,
+        addExpense,
+        fetchExpenses,
+        deleteExpense,
+        totalExpenses,
+        totalBalance,
+        transactionHistory,
+      }}
+    >
       {children}
-      <Toaster 
+      <Toaster
         position="bottom-right"
         toastOptions={{
           duration: 3000,
-          style: {
-            background: '#363636',
-            color: '#fff',
-          },
-          success: {
-            duration: 3000,
-            theme: {
-              primary: 'green',
-              secondary: 'black',
-            },
-          },
-          error: {
-            duration: 3000,
-            theme: {
-              primary: 'red',
-              secondary: 'black',
-            },
-            closeOnClick: true
-          },
+          style: { background: "#363636", color: "#fff" },
         }}
       />
     </GlobalContext.Provider>
   );
 };
 
-export const useGlobalContext = () => {
-  return useContext(GlobalContext);
-};
+export const useGlobalContext = () => useContext(GlobalContext);
