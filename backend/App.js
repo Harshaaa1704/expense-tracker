@@ -11,7 +11,7 @@ const PORT = process.env.PORT;
 
 
 app.use(cors({
-    origin: 'http://localhost:3001      ',  // Allow all origins
+    origin: 'http://localhost:3000      ',  // Allow all origins
     methods: ["GET", "POST", "DELETE"],
     credentials: true,
 }));
@@ -20,7 +20,9 @@ app.use(express.json())
 
 app.use(cookieParser());
 
-
+app.get('/', (req, res) => {
+    res.send('API is running....')
+});
 readdirSync('./routes').map((route) => app.use('', require('./routes/' +route)))
 
 const server = () => {
